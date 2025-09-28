@@ -1,0 +1,12 @@
+# Environnements Virtuels
+.venv/
+venv/
+__pycache__/
+
+# Fichiers de données et modèles sérialisés
+*.pkl
+*.csv
+*.json
+
+# Logs et autres fichiers temporaires
+*.log
