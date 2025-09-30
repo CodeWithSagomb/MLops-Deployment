@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from contextlib import asynccontextmanager # Import nécessaire pour lifespan
-import pickle # Import nécessaire pour charger les modèles
+from contextlib import asynccontextmanager #
+import pickle # 
+from pydantic_settings import BaseSettings #
+from prometheus_fastapi_instrumentator import Instrumentator 
 
 # ----------------------------------------------------
 # A. DÉFINITION DU SCHÉMA DE DONNÉES (PYDANTIC)
@@ -27,11 +29,9 @@ class IrisFeatures(BaseModel):
 # ----------------------------------------------------
 # B. FONCTION DE CHARGEMENT DES MODÈLES (LIFESPAN)
 # ----------------------------------------------------
-# Le décorateur asynccontextmanager transforme la fonction en un contexte de cycle de vie.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Démarrage (Application Startup)
-    # C'est ici que les modèles sont chargés UNE SEULE FOIS.
     print("--- DÉMARRAGE : Chargement des modèles ML... ---")
     
     # 1. Charger les fichiers .pkl
@@ -42,33 +42,52 @@ async def lifespan(app: FastAPI):
         rf_model = pickle.load(f)
 
     # 2. Stocker les modèles dans l'état de l'application
-    # app.state est l'endroit idéal pour stocker des ressources globales.
     app.state.models = {
         "logreg": logreg_model,
         "random_forest": rf_model,
     }
+
     
     print("--- DÉMARRAGE : Modèles chargés et prêts. ---")
     yield
     
     # Arrêt (Application Shutdown)
-    # Optionnel, mais bonne pratique pour les grosses ressources.
     print("--- ARRÊT : Nettoyage des ressources... ---")
     app.state.models = {}
 
 
 # ----------------------------------------------------
-# C. APPLICATION FASTAPI (Initialisation avec lifespan)
+# C. DÉFINITION DE LA CONFIGURATION (Pydantic Settings)
+# ----------------------------------------------------
+class Settings(BaseSettings):
+    # Ces valeurs seront prioritaires sur les variables d'environnement (API_TITLE, etc.)
+    api_title: str = "MLOps Iris Classifier (Default)"
+    api_version: str = "2.0.0-DEFAULT"
+    api_description: str = "Service with dynamic configuration."
+    
+    # Permet de charger un fichier .env localement si on lance Python sans Docker Compose
+    class Config:
+        env_file = ".env" 
+
+settings = Settings() # Instanciation des paramètres
+
+# ----------------------------------------------------
+# D. APPLICATION FASTAPI (Initialisation avec lifespan et Settings)
 # ----------------------------------------------------
 app = FastAPI(
-    title="MLOps FastAPI Service",
-    description="A service for Iris classification.",
-    version="1.0.0",
+    title=settings.api_title,
+    description=settings.api_description,
+    version=settings.api_version,
     # IMPORTANT : Lier la fonction lifespan à l'application
     lifespan=lifespan 
 )
 
-# ... Les endpoints / et /health restent ici ...
+# NOUVEAU : Initialiser l'instrumentation APRES la création de l'objet app
+Instrumentator().instrument(app).expose(app) # <<< AJOUTER CETTE LIGNE
+
+# ----------------------------------------------------
+# E. ENDPOINTS DE STATUS
+# ----------------------------------------------------
 @app.get("/", tags=["Status"])
 async def root():
     """Returns a simple welcome message."""
@@ -76,19 +95,12 @@ async def root():
 
 @app.get("/health", tags=["Status"])
 async def health_check():
-    """
-    Returns the status of the API.
-    """
+    """Returns the status of the API."""
     return {"status": "healthy"}
 
-# NOTE : L'endpoint de prédiction vient à l'étape suivante !
-
-
 # ----------------------------------------------------
-# D. ENDPOINT DE PRÉDICTION
+# F. ENDPOINT DE PRÉDICTION
 # ----------------------------------------------------
-
-# Mapping des indices de classe aux noms de fleurs pour un résultat lisible
 IRIS_CLASSES = {0: "setosa", 1: "versicolor", 2: "virginica"}
 
 @app.post("/predict/{model_name}", tags=["Prediction"])
@@ -105,7 +117,6 @@ async def predict(model_name: str, features: IrisFeatures):
     model = app.state.models[model_name]
     
     # 3. Conversion des données Pydantic en format d'entrée ML (Numpy)
-    # On crée une liste des valeurs [sepal_length, sepal_width, ...]
     input_data = [[
         features.sepal_length,
         features.sepal_width,
@@ -114,7 +125,6 @@ async def predict(model_name: str, features: IrisFeatures):
     ]]
 
     # 4. Prédiction
-    # model.predict prend une liste de listes (ou un tableau Numpy)
     prediction_index = model.predict(input_data)[0]
     
     # 5. Conversion du résultat numérique en nom de fleur lisible

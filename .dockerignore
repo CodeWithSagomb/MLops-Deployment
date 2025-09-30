@@ -1,0 +1,16 @@
+# Ignorer les artefacts Git
+.git
+
+# Ignorer les environnements locaux
+.venv
+__pycache__
+
+# Ignorer les fichiers de construction temporaires
+*.pyc
+
+# Ignorer les gros fichiers que nous gérons par copie explicite
+# Nous copierons les .pkl individuellement, mais nous les ignorons ici pour être sûrs
+#*.pkl
+
+# Ignorer le Dockerfile lui-même dans le contexte
+Dockerfile

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # 1. SERVICE API MLOPS
+  ml_api:
+    image: fastapi-ml-service:v3.1 # 
+    container_name: ml-api-prod
+    env_file:
+      - .env 
+    ports:
+      - "8000:8000"
+    restart: always 
+
+  # 2. SERVICE PROMETHEUS (Collecteur de Métriques)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      # Lie le fichier de configuration local à l'intérieur du conteneur
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml 
+    ports:
+      - "9090:9090"
+    command: 
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: always
+
+  # 3. SERVICE GRAFANA (Visualisation)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000" # Grafana utilise le port 3000 par défaut
+    environment:
+      # Permet de se connecter avec admin/admin par défaut
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: always

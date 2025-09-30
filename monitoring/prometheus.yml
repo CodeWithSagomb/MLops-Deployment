@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s # Fréquence de collecte des métriques
+
+scrape_configs:
+  # Job pour surveiller les composants de Docker
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['host.docker.internal:9323'] # Utilise l'API Docker interne
+  
+  # Job pour surveiller l'API MLOps
+  - job_name: 'ml-api'
+    # L'adresse est le nom du conteneur tel que défini dans docker-compose.yml
+    static_configs:
+      - targets: ['ml_api:8000']
+    metrics_path: '/metrics' # L'endpoint que l'instrumentator a exposé
